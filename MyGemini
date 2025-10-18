@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Giám Khảo IELTS Writing Với System Instruction</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+        #chat-window::-webkit-scrollbar { width: 8px; }
+        #chat-window::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <!-- Khung Chat Chính -->
+    <div class="w-full max-w-3xl bg-black shadow-2xl rounded-2xl flex flex-col h-[95vh] md:h-[90vh] overflow-hidden">
+
+        <!-- Tiêu đề và Hướng dẫn Hệ thống -->
+        <header class="p-4 border-b bg-rose-700 text-white rounded-t-2xl">
+            <h1 class="text-lg font-bold">Giám Khảo IELTS Writing ✍️</h1>
+            <p class="text-sm opacity-90 mb-2">Vai trò được định hình bằng các tiêu chí chấm điểm IELTS chính thức.</p>
+
+            <!-- System Instruction chứa Rubric (mô phỏng RAG) -->
+            <textarea id="system-instruction-input"
+                      placeholder="Nhập vai trò chuyên môn..."
+                      class="w-full p-2 text-sm text-gray-900 border border-red-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400 mt-1 h-16 resize-none"
+                      style="color: black;">
+Bạn là một giám khảo chấm thi IELTS Writing Task 2 chuyên nghiệp, công bằng và nghiêm khắc.
+QUY TẮC BẮT BUỘC: 1. LUÔN LUÔN CHẤM ĐIỂM theo 4 tiêu chí chính thức của IELTS. 2. LUÔN LUÔN CUNG CẤP điểm (Band Score) cho TỪNG tiêu chí. 3. TỔNG HỢP điểm cuối cùng (Overall Band Score). 4. Phản hồi bằng tiếng Việt và giữ giọng điệu chuyên nghiệp, khách quan.
+
+TIÊU CHÍ CHẤM ĐIỂM (TÓM TẮT):
+- Task Response (TR): Trả lời **hoàn toàn** câu hỏi, lập trường **rõ ràng**, ý tưởng **phát triển đầy đủ** (Band 7/8).
+- Coherence and Cohesion (CC): **Dòng chảy** ý tưởng logic, từ nối **tự nhiên** và sử dụng **hiệu quả** (Band 7/8).
+- Lexical Resource (LR): **Từ vựng rộng**, chính xác, tự nhiên, sử dụng tốt **collocations** (Band 7/8).
+- Grammatical Range and Accuracy (GRA): Cấu trúc **đa dạng**, kiểm soát tốt ngữ pháp, **ít lỗi** (Band 7/8).
+
+ĐỊNH DẠNG PHẢN HỒI BẮT BUỘNG:
+## BÀI CHẤM IELTS WRITING TASK 2
+### Nhận xét chung
+[Đưa ra ưu, nhược điểm của bài viết và sửa lỗi bài viết]
+### Phân tích Band Score (Thang 9)
+| Tiêu chí | Điểm Band | Nhận xét chi tiết |
+|---|---|---|
+| Task Response (TR) | [X.X] | [Lý do đạt điểm này, thiếu sót cần cải thiện.] |
+| Coherence and Cohesion (CC) | [X.X] | [Lý do đạt điểm này, thiếu sót cần cải thiện.] |
+| Lexical Resource (LR) | [X.X] | [Lý do đạt điểm này, các từ vựng nổi bật hoặc lỗi sai.] |
+| Grammatical Range and Accuracy (GRA) | [X.X] | [Lý do đạt điểm này, các cấu trúc đa dạng hoặc lỗi sai ngữ pháp nghiêm trọng.] |
+### Overall Band Score
+</textarea>
+        </header>
+
+        <!-- Khu vực hiển thị tin nhắn -->
+        <div id="chat-window" class="flex-grow p-4 overflow-y-auto space-y-4">
+            <div class="flex justify-start">
+                <div class="bg-gray-200 text-gray-800 p-3 rounded-xl rounded-tl-none max-w-xs md:max-w-md shadow-sm">
+                    Tôi đã sẵn sàng. Hãy dán đề bài và bài viết của bạn vào đây.
+                </div>
+            </div>
+        </div>
+
+        <!-- Vùng nhập liệu và nút gửi -->
+        <div class="p-4 border-t bg-gray-50 flex items-center rounded-b-2xl">
+            <input type="text" id="user-input" placeholder="Dán đề bài và bài viết của bạn vào đây..."
+                class="flex-grow p-3 border border-gray-300 rounded-l-xl focus:outline-none focus:ring-2 focus:ring-rose-500 transition duration-150">
+            <button id="send-button" onclick="sendMessage()"
+                class="bg-rose-600 hover:bg-rose-700 text-white font-semibold py-3 px-6 rounded-r-xl transition duration-150 ease-in-out shadow-md disabled:opacity-50">
+                Chấm Bài
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // Thiết lập cấu hình API
+        const apiKey = "";
+        const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent";
+
+        const chatWindow = document.getElementById('chat-window');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const systemInstructionInput = document.getElementById('system-instruction-input');
+
+        let chatHistory = [];
+        let requestQueue = Promise.resolve();
+
+        /**
+         * Hàm hiển thị tin nhắn trong giao diện chat (Hỗ trợ hiển thị Markdown)
+         */
+        function displayMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+
+            // Chuyển đổi Markdown cơ bản sang HTML (chủ yếu là ngắt dòng và tiêu đề/bảng)
+            let htmlText = text
+                .replace(/```(\w+)?\n([\s\S]*?)\n```/g, (match, lang, code) =>
+                    `<pre class="bg-gray-800 text-white p-2 rounded-md overflow-x-auto mt-1 mb-2"><code>${code.trim()}</code></pre>`)
+                .replace(/###\s*(.*)/g, '<h3>$1</h3>') // Tiêu đề H3
+                .replace(/##\s*(.*)/g, '<h2>$1</h2>') // Tiêu đề H2
+                .replace(/\n/g, '<br>'); // Ngắt dòng
+
+            if (sender === 'user') {
+                messageDiv.className = 'flex justify-end';
+                messageDiv.innerHTML = `
+                    <div class="bg-rose-500 text-white p-3 rounded-xl rounded-br-none max-w-xs md:max-w-md shadow-sm whitespace-pre-wrap">
+                        ${htmlText}
+                    </div>
+                `;
+            } else {
+                messageDiv.className = 'flex justify-start';
+                messageDiv.innerHTML = `
+                    <div class="bg-gray-200 text-gray-800 p-3 rounded-xl rounded-tl-none max-w-full shadow-sm">
+                        ${htmlText}
+                    </div>
+                `;
+            }
+
+            chatWindow.appendChild(messageDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+            return messageDiv;
+        }
+
+        /**
+         * Hàm hiển thị trạng thái đang tải (loading)
+         */
+        function showLoadingIndicator() {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = 'loading-indicator';
+            loadingDiv.className = 'flex justify-start';
+            loadingDiv.innerHTML = `
+                <div class="bg-gray-200 p-3 rounded-xl rounded-tl-none max-w-xs md:max-w-md shadow-sm">
+                    <span class="animate-pulse">Giám khảo đang chấm bài...</span>
+                </div>
+            `;
+            chatWindow.appendChild(loadingDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+            return loadingDiv;
+        }
+
+        /**
+         * Xử lý gọi API với tính năng exponential backoff
+         */
+        async function exponentialBackoffFetch(url, options, maxRetries = 5) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok && (response.status >= 500 || response.status === 429)) {
+                        throw new Error(`API Error with status ${response.status}. Retrying...`);
+                    }
+                    return response;
+                } catch (error) {
+                    if (i < maxRetries - 1) {
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 500;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    } else {
+                        throw new Error("Lỗi API không thể phục hồi sau nhiều lần thử lại.");
+                    }
+                }
+            }
+        }
+
+
+        /**
+         * Gửi tin nhắn đến API Gemini và xử lý phản hồi
+         */
+        async function sendMessage() {
+            const userText = userInput.value.trim();
+            const systemPrompt = systemInstructionInput.value.trim();
+
+            if (!userText) return;
+
+            // Vô hiệu hóa input và button
+            userInput.value = '';
+            sendButton.disabled = true;
+            userInput.disabled = true;
+            systemInstructionInput.disabled = true;
+
+            // Hiển thị tin nhắn của người dùng ngay lập tức
+            displayMessage(userText, 'user');
+
+            // Xóa lịch sử chat cũ, vì mỗi lần gửi là một bài chấm mới độc lập
+            chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: userText }] });
+
+            // Hiển thị loading
+            const loadingIndicator = showLoadingIndicator();
+
+            // Xây dựng Payload
+            const payload = {
+                contents: chatHistory,
+            };
+
+            if (systemPrompt) {
+                payload.systemInstruction = {
+                    parts: [{ text: systemPrompt }]
+                };
+            }
+
+            const options = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            };
+
+            requestQueue = requestQueue.then(async () => {
+                let geminiText = "Xin lỗi, đã xảy ra lỗi khi tạo phản hồi.";
+
+                try {
+                    const response = await exponentialBackoffFetch(`${API_URL}?key=${apiKey}`, options);
+
+                    // Kiểm tra nếu phản hồi không thành công hoặc không có nội dung (ví dụ: HTTP 204)
+                    if (!response.ok) {
+                        const errorBody = await response.text();
+                        geminiText = `Lỗi HTTP ${response.status}: ${errorBody.substring(0, 100)}...`;
+                    } else if (response.status === 204 || response.headers.get('content-length') === '0') {
+                        geminiText = "Lỗi API: Phản hồi không có nội dung (HTTP 204). Vui lòng thử lại.";
+                    } else {
+                        // Chỉ phân tích JSON khi có nội dung và không phải lỗi HTTP
+                        const result = await response.json();
+
+                        const candidate = result.candidates?.[0];
+
+                        if (candidate && candidate.content?.parts?.[0]?.text) {
+                            geminiText = candidate.content.parts[0].text;
+                        } else if (result.error) {
+                             geminiText = `Lỗi API: ${result.error.message}`;
+                        }
+                    }
+
+
+                } catch (error) {
+                    // Xử lý lỗi SyntaxError (Unexpected end of input) và các lỗi khác
+                    console.error("Lỗi gửi tin nhắn:", error);
+                    geminiText = `Đã xảy ra lỗi kết nối hoặc phân tích dữ liệu: ${error.message}. Vui lòng thử lại.`;
+                } finally {
+                    loadingIndicator.remove();
+                    // Hiển thị phản hồi của Gemini
+                    displayMessage(geminiText, 'gemini');
+
+                    // Thêm phản hồi vào lịch sử (để nếu có follow-up, AI vẫn nhớ bài chấm)
+                    chatHistory.push({ role: "model", parts: [{ text: geminiText }] });
+
+                    // Kích hoạt lại input và button
+                    sendButton.disabled = false;
+                    userInput.disabled = false;
+                    systemInstructionInput.disabled = false;
+                    userInput.focus();
+                }
+            });
+
+        }
+
+        // Lắng nghe sự kiện nhấn Enter trong ô input
+        userInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !sendButton.disabled) {
+                sendMessage();
+            }
+        });
+
+        // Thiết lập focus ban đầu
+        window.onload = () => {
+             userInput.focus();
+        };
+
+    </script>
+</body>
+</html>
